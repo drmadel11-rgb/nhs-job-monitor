@@ -1,0 +1,52 @@
+name: NHS Paediatric Nephrology Job Monitor
+
+on:
+  schedule:
+    # Runs at minute 7 of every hour (UTC) to avoid top-of-the-hour queue spikes
+    - cron: "7 * * * *"
+  workflow_dispatch: # Allows you to trigger a manual run anytime from the Actions tab
+
+permissions:
+  contents: write # Required so the workflow can commit updates to seen_nhs_jobs.json
+
+jobs:
+  check-nhs-jobs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4
+
+      - name: Run NHS job check once
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ALERT_EMAIL_FROM: ${{ secrets.ALERT_EMAIL_FROM }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+        run: python nhs_paed_neph_monitor.py --once
+
+      - name: Commit updated seen_nhs_jobs.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add seen_nhs_jobs.json
+          if git diff --cached --quiet; then
+            echo "No changes to seen_nhs_jobs.json"
+          else
+            git commit -m "Update seen_nhs_jobs.json [skip ci]"
+            git push
+          fi
